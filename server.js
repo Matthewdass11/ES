@@ -41,6 +41,8 @@ function evaluateDisasterSeverity(text) {
 }
 
 app.post('/analyze', upload.single('image'), async (req, res) => {
+  console.log("📸 Received file:", req.file);  // <--- ADD THIS LINE
+
   try {
     if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
 
