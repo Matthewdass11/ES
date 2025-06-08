@@ -31,22 +31,26 @@ app.post('/analyze', upload.single('image'), async (req, res) => {
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     const prompt = `
-You are a satellite image analysis expert.
-Based only on the satellite image provided, analyze and return a clean JSON object with the following structure:
+You are a satellite imagery expert. Analyze the uploaded image and return only a JSON object in the format below. 
+You are allowed to describe *any visible event* (not limited to flood, fire, cyclone, etc.), and determine its severity 
+based on how much of the image is affected.
+
+Return ONLY the following JSON (no commentary, no markdown):
 
 {
-  "event": "A short phrase describing the main visible phenomenon (e.g., large flood in coastal city, wildfire in forest area, cyclone over ocean, drought in agricultural zone, etc.)",
-  "event_area_percent": 0-100, // How much of the image is affected by this event
-  "severity_rating": 1-5, // 1 being minimal, 5 being catastrophic
-  "summary": "Explain your reasoning using visible signs from the image."
+  "event": "short description of what the event appears to be",
+  "event_area_percent": integer between 0-100 indicating how much of the image is affected by the event,
+  "severity_rating": integer from 1 to 5, where 1 = very minor and 5 = catastrophic,
+  "verdict": "WORTH_RESEARCH" | "NOT_WORTH_RESEARCH",
+  "summary": "short paragraph explaining what was detected and why the severity and verdict was given"
 }
 
-Your answer must be based only on visual observation of the satellite image. If unsure, describe what is seen as best you can. Always return valid JSON only.`;
+If you are unsure about an event, say "unclear event" and leave percentage as 0 and severity as 1.
+`;
 
     const result = await model.generateContent([prompt, image]);
     const response = await result.response;
     const rawText = response.text().trim();
-
     const cleanJson = rawText.replace(/```json|```/g, '').trim();
 
     let parsed;
@@ -56,16 +60,25 @@ Your answer must be based only on visual observation of the satellite image. If 
       throw new Error("Failed to parse Gemini response as JSON");
     }
 
+    // Optional rule-based override (only if needed):
+    const final_decision =
+      parsed.event_area_percent > 25 || parsed.severity_rating >= 3
+        ? "WORTH_RESEARCH"
+        : "NOT_WORTH_RESEARCH";
+
+    parsed.verdict = final_decision;
+
+    // Delete image after processing
     fs.unlinkSync(filePath);
 
     res.json({ analysis: parsed });
 
   } catch (error) {
-    console.error("❌ Gemini Vision Error:", error);
+    console.error("❌ Gemini Analysis Error:", error);
     res.status(500).json({ error: 'Failed to analyze image' });
   }
 });
 
 app.listen(port, () => {
-  console.log(`🚀 Server is running on port ${port}`);
+  console.log(`🚀 Server running on port ${port}`);
 });
