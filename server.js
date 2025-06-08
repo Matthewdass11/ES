@@ -40,45 +40,59 @@ function evaluateDisasterSeverity(text) {
   };
 }
 
+// app.post('/analyze', upload.single('image'), async (req, res) => {
+//   console.log("📸 Received file:", req.file);  // <--- ADD THIS LINE
+
+//   try {
+//     if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
+
+//     const filePath = path.join(__dirname, req.file.path);
+//     const image = {
+//       inlineData: {
+//         data: fs.readFileSync(filePath).toString('base64'),
+//         mimeType: req.file.mimetype,
+//       },
+//     };
+
+//     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+//     const prompt = `Imagine you're an expert disaster scientist analyzing this satellite image.
+// What critical factors are visible? Assess:
+// - signs of fire, flood, cyclone, drought, or structural damage
+// - terrain stability
+// - accessibility for ground research
+// Then provide a summary that can be used for a rule-based system.`;
+
+//     const result = await model.generateContent([prompt, image]);
+//     const response = await result.response;
+//     const text = response.text();
+
+//     const { factors, severityPercent, verdict } = evaluateDisasterSeverity(text);
+
+//     fs.unlinkSync(filePath); // cleanup file
+
+//     res.json({
+//       analysis: text,
+//       factors,
+//       severityPercent,
+//       verdict
+//     });
+//   } catch (error) {
+//     console.error('❌ Gemini Vision Error:', error);
+//     res.status(500).json({ error: 'Failed to analyze image' });
+//   }
+// });
 app.post('/analyze', upload.single('image'), async (req, res) => {
-  console.log("📸 Received file:", req.file);  // <--- ADD THIS LINE
-
   try {
-    if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
-
-    const filePath = path.join(__dirname, req.file.path);
-    const image = {
-      inlineData: {
-        data: fs.readFileSync(filePath).toString('base64'),
-        mimeType: req.file.mimetype,
-      },
-    };
-
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-    const prompt = `Imagine you're an expert disaster scientist analyzing this satellite image.
-What critical factors are visible? Assess:
-- signs of fire, flood, cyclone, drought, or structural damage
-- terrain stability
-- accessibility for ground research
-Then provide a summary that can be used for a rule-based system.`;
-
-    const result = await model.generateContent([prompt, image]);
-    const response = await result.response;
-    const text = response.text();
-
-    const { factors, severityPercent, verdict } = evaluateDisasterSeverity(text);
-
-    fs.unlinkSync(filePath); // cleanup file
-
-    res.json({
-      analysis: text,
-      factors,
-      severityPercent,
-      verdict
+    return res.json({
+      debug: true,
+      received: !!req.file,
+      filename: req.file?.originalname,
+      mimetype: req.file?.mimetype,
+      size: req.file?.size
     });
   } catch (error) {
-    console.error('❌ Gemini Vision Error:', error);
-    res.status(500).json({ error: 'Failed to analyze image' });
+    console.error("❌ Debug error:", error);
+    res.status(500).json({ error: 'Debug failed' });
   }
 });
 
