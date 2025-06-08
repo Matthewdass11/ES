@@ -28,7 +28,7 @@ app.post('/analyze', upload.single('image'), async (req, res) => {
       }
     };
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     const prompt = `
 You are a satellite imagery expert. Analyze the uploaded image and return only a JSON object in the format below. 
