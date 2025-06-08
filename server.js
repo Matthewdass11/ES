@@ -31,17 +31,24 @@ app.post('/analyze', upload.single('image'), async (req, res) => {
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     const prompt = `
-You are an expert satellite image analyst. 
-Analyze the uploaded image and return a JSON response that includes:
+You are an expert satellite image analyst.
 
+Evaluate the uploaded satellite image and return only a JSON object:
 {
-  "factors": [Array of risks like "flood risk", "terrain instability", "cyclone activity", "fire damage", "drought", "urban damage", "pollution", "forest loss", "erosion", "power outage risk", "infrastructure collapse", "communication blackout", "hazardous terrain", "landslide risk", "earthquake aftermath", "biological contamination", "accessibility issues", "unusual thermal signature", "resource potential", "unexplained activity"],
+  "factors": [
+    List of present risks like:
+    "flood risk" – water overflow, waterlogged areas, breached riverbanks,
+    "fire damage" – scorched land, smoke plumes, burn scars,
+    "cyclone activity" – spiral clouds, eye formation, ocean swirls,
+    "drought" – dry cracked land, low vegetation, shrinking lakes,
+    ...
+  ],
   "severity_percent": 0-100,
   "verdict": "WORTH_RESEARCH" | "NOT_WORTH_RESEARCH",
-  "summary": "Explanation of your findings"
+  "summary": "Explain clearly what was found and how."
 }
 
-Only return the raw JSON object, nothing else.
+Only return valid JSON. Base your decision on visible signs. Don’t guess. If unclear, omit the factor.
 `;
 
     const result = await model.generateContent([prompt, image]);
