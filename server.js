@@ -31,31 +31,47 @@ app.post('/analyze', upload.single('image'), async (req, res) => {
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     const prompt = `
-You are an expert satellite image analyst.
+You are a highly experienced satellite image analyst.
 
-Evaluate the uploaded satellite image and return only a JSON object:
+Your task is to examine the provided satellite image and return ONLY a raw JSON object. Do NOT include any extra text, explanations, or markdown formatting (like \`\`\`json).
+
+The JSON must follow THIS exact structure:
+
 {
   "factors": [
-    List of present risks like:
-    "flood risk" – water overflow, waterlogged areas, breached riverbanks,
-    "fire damage" – scorched land, smoke plumes, burn scars,
-    "cyclone activity" – spiral clouds, eye formation, ocean swirls,
-    "drought" – dry cracked land, low vegetation, shrinking lakes,
-    ...
+    // Include ONLY observed risks from the following list.
+    // DO NOT guess. Only include a factor if it is clearly visible in the image.
+
+    "flood risk",              // water overflow, submerged areas, breached riverbanks
+    "fire damage",             // burn scars, smoke plumes, charred vegetation
+    "cyclone activity",        // spiral cloud patterns, hurricane eye, rotating structure
+    "drought",                 // dry cracked soil, visibly dead crops, dried-up rivers
+    "erosion",                 // degraded land, collapsed slopes, soil loss patterns
+    "urban damage",           // visible infrastructure collapse, debris fields
+    "terrain instability",     // landslide scars, uneven ground, structural tilt
+    "pollution",              // oil spills, discolored water bodies, hazy air layers
+    "forest loss",            // large patches of cleared trees or deforestation
+    "accessibility issues"     // blocked roads, isolated areas, impassable terrain
   ],
   "severity_percent": 0-100,
   "verdict": "WORTH_RESEARCH" | "NOT_WORTH_RESEARCH",
-  "summary": "Explain clearly what was found and how."
+  "summary": "One paragraph explaining what was found, the indicators seen, and how it impacted your decision."
 }
 
-Only return valid JSON. Base your decision on visible signs. Don’t guess. If unclear, omit the factor.
+⚠️ Rules:
+- Do NOT include any other text outside the JSON.
+- Do NOT guess or include unclear risks.
+- If no clear factors are detected, return an empty array like "factors": []
+- You MUST return a valid, parseable JSON object.
+
+Your output will be consumed by an automated rule-based expert system. Precision is critical.
 `;
 
     const result = await model.generateContent([prompt, image]);
     const response = await result.response;
     const rawText = response.text().trim();
 
-    // Remove code block markdown if present (```json ... ```)
+    // Remove code block markdown if present
     const cleanJson = rawText.replace(/```json|```/g, '').trim();
 
     let parsed;
@@ -65,7 +81,7 @@ Only return valid JSON. Base your decision on visible signs. Don’t guess. If u
       throw new Error("Failed to parse Gemini response as JSON");
     }
 
-    // Rule-based system (based on factors + severity)
+    // Rule-based system
     const rules = {
       flood: parsed.factors.some(f => f.includes("flood")),
       fire: parsed.factors.some(f => f.includes("fire")),
@@ -93,10 +109,8 @@ Only return valid JSON. Base your decision on visible signs. Don’t guess. If u
     const final_decision =
       parsed.severity_percent > 35 ? "WORTH_RESEARCH" : "NOT_WORTH_RESEARCH";
 
-    // Delete image after analysis
     fs.unlinkSync(filePath);
 
-    // Send structured response
     res.json({
       analysis: {
         eventType,
