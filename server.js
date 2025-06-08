@@ -1,4 +1,3 @@
-// server.js
 const express = require('express');
 const multer = require('multer');
 const dotenv = require('dotenv');
@@ -8,12 +7,32 @@ const path = require('path');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 dotenv.config();
+
 const app = express();
 const port = process.env.PORT || 10000;
 
 app.use(cors());
+
 const upload = multer({ dest: 'uploads/' });
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+
+const prompt = `
+You are a scientific satellite image analyst. From this image, analyze and return only a JSON object:
+{
+  "event_type": "fire" | "flood" | "cyclone" | "drought" | "unknown",
+  "area_affected_percent": 0-100, // estimated from image
+  "intensity_rating": 1-5, // 5 means severe, 1 means mild
+  "summary": "Describe key visible signs justifying your analysis."
+}
+
+Base "event_type" only on visible signs:
+- fire: smoke plumes, scorched land, red-hot zones
+- flood: water overflow, submerged zones, muddy water
+- cyclone: spiral clouds, eye pattern, ocean turbulence
+- drought: cracked earth, dry vegetation, shrinking lakes
+
+If not clearly any of the above, return "unknown". Only return valid JSON.
+`;
 
 app.post('/analyze', upload.single('image'), async (req, res) => {
   try {
@@ -28,18 +47,6 @@ app.post('/analyze', upload.single('image'), async (req, res) => {
     };
 
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
-    const prompt = `You are an expert satellite image analyst.
-Evaluate the uploaded satellite image and return only a JSON object:
-{
-  "event_type": "flood" | "fire" | "cyclone" | "drought" | "unknown",
-  "area_affected_percent": number (0-100),
-  "intensity_rating": number (0-10),
-  "summary": "Explanation of your findings"
-}
-Base your classification ONLY on visible features.
-Avoid guessing. If unclear, return "unknown".`;
-
     const result = await model.generateContent([prompt, image]);
     const response = await result.response;
     const rawText = response.text().trim();
@@ -52,50 +59,50 @@ Avoid guessing. If unclear, return "unknown".`;
       throw new Error("Failed to parse Gemini response as JSON");
     }
 
+    // --- RULE BASED SYSTEM (≥ 15 rules) ---
     const rules = {
-      isFlood: parsed.event_type === "flood",
-      isFire: parsed.event_type === "fire",
-      isCyclone: parsed.event_type === "cyclone",
-      isDrought: parsed.event_type === "drought",
-
-      isWidespread: parsed.area_affected_percent >= 60,
-      isModerateSpread: parsed.area_affected_percent >= 30 && parsed.area_affected_percent < 60,
-      isLocalized: parsed.area_affected_percent < 30,
-
-      isExtremeIntensity: parsed.intensity_rating >= 9,
-      isHighIntensity: parsed.intensity_rating >= 7 && parsed.intensity_rating < 9,
-      isModerateIntensity: parsed.intensity_rating >= 4 && parsed.intensity_rating < 7,
-      isLowIntensity: parsed.intensity_rating < 4,
-
-      isCritical: parsed.intensity_rating >= 9 || parsed.area_affected_percent >= 70,
-      isHighPriority: parsed.intensity_rating >= 7 || parsed.area_affected_percent >= 50,
-      isResearchWorthy: parsed.intensity_rating >= 6 || parsed.area_affected_percent >= 40,
-      isNotResearchWorthy: parsed.intensity_rating < 6 && parsed.area_affected_percent < 40
+      highSeverity: parsed.intensity_rating >= 4,
+      veryHighArea: parsed.area_affected_percent >= 70,
+      moderateArea: parsed.area_affected_percent >= 40,
+      lowArea: parsed.area_affected_percent <= 20,
+      fireDetected: parsed.event_type === "fire",
+      floodDetected: parsed.event_type === "flood",
+      cycloneDetected: parsed.event_type === "cyclone",
+      droughtDetected: parsed.event_type === "drought",
+      unknownDetected: parsed.event_type === "unknown",
+      extremeRisk: parsed.intensity_rating === 5 && parsed.area_affected_percent >= 60,
+      borderlineCase: parsed.intensity_rating === 3 && parsed.area_affected_percent < 50,
+      minorIssue: parsed.intensity_rating <= 2 && parsed.area_affected_percent < 30,
+      droughtWide: parsed.event_type === "drought" && parsed.area_affected_percent > 50,
+      fireSevere: parsed.event_type === "fire" && parsed.intensity_rating >= 4,
+      cycloneEmergency: parsed.event_type === "cyclone" && parsed.area_affected_percent >= 70,
     };
 
-    let eventType = "unknown";
-    if (rules.isFlood) eventType = "flood";
-    else if (rules.isFire) eventType = "fire";
-    else if (rules.isCyclone) eventType = "cyclone";
-    else if (rules.isDrought) eventType = "drought";
+    // Inference
+    const urgency =
+      rules.extremeRisk || rules.highSeverity ? "CRITICAL" :
+      rules.veryHighArea || rules.fireSevere || rules.droughtWide ? "HIGH" :
+      rules.moderateArea ? "MEDIUM" :
+      "LOW";
 
-    let urgency = "LOW";
-    if (rules.isCritical) urgency = "CRITICAL";
-    else if (rules.isHighPriority) urgency = "HIGH";
-    else if (rules.isModerateIntensity || rules.isModerateSpread) urgency = "MEDIUM";
+    const final_decision =
+      rules.unknownDetected || rules.minorIssue ? "NOT_WORTH_RESEARCH" :
+      rules.extremeRisk || rules.highSeverity || rules.droughtWide ? "WORTH_RESEARCH" :
+      rules.borderlineCase ? "WORTH_RESEARCH_WITH_CAUTION" :
+      "WORTH_RESEARCH";
 
-    const final_decision = rules.isResearchWorthy ? "WORTH_RESEARCH" : "NOT_WORTH_RESEARCH";
-
+    // Delete temp image
     fs.unlinkSync(filePath);
 
+    // Final response
     res.json({
       analysis: {
-        eventType,
+        eventType: parsed.event_type,
+        severity_percent: parsed.area_affected_percent,
         urgency,
         final_decision,
-        severity_percent: parsed.area_affected_percent,
-        intensity_rating: parsed.intensity_rating,
-        summary: parsed.summary
+        summary: parsed.summary,
+        factors: [parsed.event_type, `${parsed.area_affected_percent}% area`, `Intensity: ${parsed.intensity_rating}`]
       }
     });
 
