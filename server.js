@@ -30,29 +30,77 @@ app.post('/analyze', upload.single('image'), async (req, res) => {
 
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-    const result = await model.generateContent([
-      `Imagine you're a scientific researcher evaluating this satellite image for:
-- flood risk
-- fire damage
-- terrain instability
-- cyclone/hurricane formation
-- structural changes
-- accessibility for ground teams
+    const prompt = `
+You are an expert satellite image analyst. 
+Analyze the uploaded image and return a JSON response that includes:
 
-Based on visible evidence, return a JSON with:
 {
-  "factors": [...],
+  "factors": [Array of risks like "flood risk", "terrain instability", "cyclone activity", "fire damage", "drought", "urban damage", "pollution", "forest loss", "erosion", "power outage risk", "infrastructure collapse", "communication blackout", "hazardous terrain", "landslide risk", "earthquake aftermath", "biological contamination", "accessibility issues", "unusual thermal signature", "resource potential", "unexplained activity"],
   "severity_percent": 0-100,
   "verdict": "WORTH_RESEARCH" | "NOT_WORTH_RESEARCH",
-  "summary": "..."
-}`, image
-    ]);
+  "summary": "Explanation of your findings"
+}
 
+Only return the raw JSON object, nothing else.
+`;
+
+    const result = await model.generateContent([prompt, image]);
     const response = await result.response;
-    const text = response.text();
+    const rawText = response.text().trim();
+
+    // Remove code block markdown if present (```json ... ```)
+    const cleanJson = rawText.replace(/```json|```/g, '').trim();
+
+    let parsed;
+    try {
+      parsed = JSON.parse(cleanJson);
+    } catch (err) {
+      throw new Error("Failed to parse Gemini response as JSON");
+    }
+
+    // Rule-based system (based on factors + severity)
+    const rules = {
+      flood: parsed.factors.some(f => f.includes("flood")),
+      fire: parsed.factors.some(f => f.includes("fire")),
+      cyclone: parsed.factors.some(f => f.includes("cyclone")),
+      terrain: parsed.factors.some(f => f.includes("terrain")),
+      erosion: parsed.factors.some(f => f.includes("erosion")),
+      comms: parsed.factors.some(f => f.includes("communication")),
+      infrastructure: parsed.factors.some(f => f.includes("infrastructure")),
+    };
+
+    let eventType = "unknown";
+    if (rules.flood) eventType = "flood";
+    else if (rules.fire) eventType = "fire";
+    else if (rules.cyclone) eventType = "cyclone";
+    else if (rules.terrain) eventType = "terrain instability";
+    else if (rules.erosion) eventType = "erosion";
+    else if (rules.comms) eventType = "communication failure";
+    else if (rules.infrastructure) eventType = "infrastructure collapse";
+
+    const urgency =
+      parsed.severity_percent >= 70 ? "CRITICAL" :
+      parsed.severity_percent >= 40 ? "HIGH" :
+      parsed.severity_percent >= 20 ? "MEDIUM" : "LOW";
+
+    const final_decision =
+      parsed.severity_percent > 35 ? "WORTH_RESEARCH" : "NOT_WORTH_RESEARCH";
+
+    // Delete image after analysis
     fs.unlinkSync(filePath);
 
-    res.json({ analysis: text });
+    // Send structured response
+    res.json({
+      analysis: {
+        eventType,
+        urgency,
+        final_decision,
+        severity_percent: parsed.severity_percent,
+        summary: parsed.summary,
+        factors: parsed.factors
+      }
+    });
+
   } catch (error) {
     console.error("❌ Gemini Vision Error:", error);
     res.status(500).json({ error: 'Failed to analyze image' });
