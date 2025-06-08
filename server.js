@@ -31,41 +31,38 @@ app.post('/analyze', upload.single('image'), async (req, res) => {
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     const prompt = `
-You are a highly experienced satellite image analyst.
+You are a satellite image expert.
 
-Your task is to examine the provided satellite image and return ONLY a raw JSON object. Do NOT include any extra text, explanations, or markdown formatting (like \`\`\`json).
+Analyze the uploaded satellite image and return ONLY a valid JSON object using the following fixed keywords for "factors":
 
-The JSON must follow THIS exact structure:
+[
+  "flood risk",
+  "fire damage",
+  "cyclone activity",
+  "drought",
+  "erosion",
+  "urban damage",
+  "terrain instability",
+  "pollution",
+  "forest loss",
+  "accessibility issues"
+]
+
+Do NOT create your own labels. Only use these words **verbatim** if evidence is clearly visible.
+
+Here is the format:
 
 {
-  "factors": [
-    // Include ONLY observed risks from the following list.
-    // DO NOT guess. Only include a factor if it is clearly visible in the image.
-
-    "flood risk",              // water overflow, submerged areas, breached riverbanks
-    "fire damage",             // burn scars, smoke plumes, charred vegetation
-    "cyclone activity",        // spiral cloud patterns, hurricane eye, rotating structure
-    "drought",                 // dry cracked soil, visibly dead crops, dried-up rivers
-    "erosion",                 // degraded land, collapsed slopes, soil loss patterns
-    "urban damage",           // visible infrastructure collapse, debris fields
-    "terrain instability",     // landslide scars, uneven ground, structural tilt
-    "pollution",              // oil spills, discolored water bodies, hazy air layers
-    "forest loss",            // large patches of cleared trees or deforestation
-    "accessibility issues"     // blocked roads, isolated areas, impassable terrain
-  ],
+  "factors": [array of above terms],
   "severity_percent": 0-100,
   "verdict": "WORTH_RESEARCH" | "NOT_WORTH_RESEARCH",
-  "summary": "One paragraph explaining what was found, the indicators seen, and how it impacted your decision."
+  "summary": "Explain clearly what was found and how you know."
 }
 
-⚠️ Rules:
-- Do NOT include any other text outside the JSON.
-- Do NOT guess or include unclear risks.
-- If no clear factors are detected, return an empty array like "factors": []
-- You MUST return a valid, parseable JSON object.
-
-Your output will be consumed by an automated rule-based expert system. Precision is critical.
+Do NOT return any other text. Just valid JSON.
 `;
+console.log("🧠 Gemini raw response:\n", rawText);
+
 
     const result = await model.generateContent([prompt, image]);
     const response = await result.response;
@@ -83,14 +80,15 @@ Your output will be consumed by an automated rule-based expert system. Precision
 
     // Rule-based system
     const rules = {
-      flood: parsed.factors.some(f => f.includes("flood")),
-      fire: parsed.factors.some(f => f.includes("fire")),
-      cyclone: parsed.factors.some(f => f.includes("cyclone")),
-      terrain: parsed.factors.some(f => f.includes("terrain")),
-      erosion: parsed.factors.some(f => f.includes("erosion")),
-      comms: parsed.factors.some(f => f.includes("communication")),
-      infrastructure: parsed.factors.some(f => f.includes("infrastructure")),
-    };
+  flood: parsed.factors.some(f => /flood/i.test(f)),
+  fire: parsed.factors.some(f => /fire/i.test(f)),
+  cyclone: parsed.factors.some(f => /cyclone/i.test(f)),
+  terrain: parsed.factors.some(f => /terrain/i.test(f)),
+  erosion: parsed.factors.some(f => /erosion/i.test(f)),
+  comms: parsed.factors.some(f => /communication/i.test(f)),
+  infrastructure: parsed.factors.some(f => /infrastructure/i.test(f))
+};
+
 
     let eventType = "unknown";
     if (rules.flood) eventType = "flood";
