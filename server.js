@@ -10,7 +10,12 @@ const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 const app = express();
 const port = 10000;
 
-app.use(cors());
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST'],
+  allowedHeaders: ['Content-Type']
+}));
+
 const upload = multer({ dest: 'uploads/' });
 
 app.post('/analyze', upload.single('image'), async (req, res) => {
