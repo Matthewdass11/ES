@@ -38,18 +38,47 @@ app.post('/analyze', upload.single('image'), async (req, res) => {
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     const prompt = `
-You are a satellite imagery expert. Analyze the uploaded image and return only the following JSON:
+You are a rule-based expert system specialized in analyzing satellite images for natural or man-made events.
 
+🧠 RULE BASE (You must strictly follow all 15 rules below):
+
+1. If image contains cloud patterns, classify it as weather-related satellite image.
+2. If wildfires or smoke are visible, mark the event as "fire outbreak".
+3. If water bodies overflow boundaries, identify as "flood".
+4. If deforestation or land clearing is observed, mark it as "deforestation".
+5. If vegetation appears yellow or brown where green is expected, mark as "drought or stress".
+6. If terrain shows deformation or cracks, mark as "earthquake aftermath".
+7. If roads or buildings are submerged, mark as "urban flooding".
+8. If coastal regions show changes or waves inland, mark as "tsunami impact".
+9. If unusual heat signatures are observed (e.g. industrial zones), mark as "thermal anomaly".
+10. If snow or ice recedes drastically, label the event as "glacial melt".
+11. If night-time lights suddenly disappear in populated areas, mark as "power outage or conflict zone".
+12. If agricultural land changes in shape/health, mark as "crop stress or failure".
+13. If oil spills or water discoloration are observed in oceans, mark as "marine pollution".
+14. If image contains human faces, cars, buildings from street view, documents, or memes — classify as "non-satellite image".
+15. If unsure about classification, respond as "non-satellite image" with verdict "NOT_WORTH_RESEARCH".
+
+🧾 Response Format (JSON only):
 {
   "event": "short description",
   "event_area_percent": 0-100,
   "severity_rating": 1-5,
   "verdict": "WORTH_RESEARCH" | "NOT_WORTH_RESEARCH",
-  "summary": "reason"
+  "summary": "explanation of reasoning"
 }
 
-If unsure, return "unclear event", 0%, 1, "NOT_WORTH_RESEARCH", and summary explaining why.
+⚠️ If the input is not a satellite image, respond with:
+{
+  "event": "non-satellite image",
+  "event_area_percent": 0,
+  "severity_rating": 1,
+  "verdict": "NOT_WORTH_RESEARCH",
+  "summary": "This expert system only analyzes satellite imagery. The uploaded image is not recognized as satellite data."
+}
+
+Now analyze the uploaded image using the rules above.
 `;
+
 
     const result = await model.generateContent([prompt, image]);
     const response = await result.response;
@@ -58,7 +87,6 @@ If unsure, return "unclear event", 0%, 1, "NOT_WORTH_RESEARCH", and summary expl
     console.log("📦 Gemini raw response:");
     console.log(rawText);
 
-    // Extract clean JSON object from Gemini's markdown response
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       throw new Error("Gemini response did not contain a valid JSON object.");
