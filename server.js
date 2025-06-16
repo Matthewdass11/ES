@@ -27,6 +27,12 @@ app.post('/analyze', upload.single('image'), async (req, res) => {
     }
 
     filePath = path.join(__dirname, req.file.path);
+    console.log("📂 Temp image path:", filePath);
+    console.log("📂 Temp image exists:", fs.existsSync(filePath));
+
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`Uploaded file not found at: ${filePath}`);
+    }
 
     const image = {
       inlineData: {
@@ -37,68 +43,7 @@ app.post('/analyze', upload.single('image'), async (req, res) => {
 
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-    const prompt = `
-You are a rule-based expert system specialized in analyzing satellite images for natural or man-made events.
-
-🧠 RULE BASE (Strictly follow all 25 rules below):
-
-🌍 ENVIRONMENTAL & NATURAL DISASTER DETECTION
-1. If cloud formations are observed → classify as "weather pattern".
-2. If smoke or active fire hotspots are visible → classify as "fire outbreak".
-3. If terrain shows flooding (water encroaching land) → classify as "flood".
-4. If brown or missing forest cover is observed → classify as "deforestation".
-5. If vegetation appears yellow or brown in expected green zones → classify as "drought".
-6. If sudden land cracks or deformation are observed → classify as "earthquake impact".
-7. If infrastructure (roads/buildings) is submerged → classify as "urban flood".
-8. If coastal water pushes inland or shows wave disturbance → classify as "tsunami aftermath".
-9. If thermal anomalies (heat islands or heat plumes) are present → classify as "thermal hazard".
-10. If glaciers or ice sheets shrink over time → classify as "glacial melt".
-
-🛰️ URBAN & INFRASTRUCTURE ANALYSIS
-11. If night-time lights disappear suddenly in urban zones → classify as "power outage or conflict".
-12. If road networks are newly carved or disappear → classify as "urban development or destruction".
-13. If dense traffic or mass movement is seen on highways → classify as "mass migration or evacuation".
-14. If land has artificial cuts/patterns (e.g. mining pits) → classify as "mining activity".
-15. If large shadow patterns or symmetrical structures appear → classify as "man-made construction".
-
-🌾 AGRICULTURE & CLIMATE MONITORING
-16. If agricultural plots show irregular patches → classify as "crop failure".
-17. If snow unexpectedly covers fertile zones → classify as "cold snap or climate anomaly".
-18. If multiple images show change in seasonal crop reflectance → classify as "seasonal change".
-
-🌊 MARINE & POLLUTION EVENTS
-19. If ocean color appears patchy or dark → classify as "oil spill or marine pollution".
-20. If river deltas appear blurred or redirected → classify as "sedimentation or blockage".
-
-🚫 NON-SATELLITE REJECTION CRITERIA
-21. If human faces are visible → reject as "non-satellite image".
-22. If documents, memes, selfies, or screenshots are detected → reject as "non-satellite image".
-23. If objects are seen from ground-level (cars, houses) with perspective → reject as "non-satellite image".
-24. If indoor items or furniture are visible → reject as "non-satellite image".
-
-❓ UNCERTAINTY RULE
-25. If the image does not clearly fit any of the above categories, or lacks top-down satellite view → reject with reason: "non-satellite image or insufficient data".
-
-📦 Output JSON format (strictly):
-{
-  "event": "short description",
-  "event_area_percent": 0-100,
-  "severity_rating": 1-5,
-  "verdict": "WORTH_RESEARCH" | "NOT_WORTH_RESEARCH",
-  "summary": "brief explanation of how the rules led to this conclusion"
-}
-
-⚠️ If the input is not satellite-based, always respond with:
-{
-  "event": "non-satellite image",
-  "event_area_percent": 0,
-  "severity_rating": 1,
-  "verdict": "NOT_WORTH_RESEARCH",
-  "summary": "This expert system only analyzes satellite imagery. The uploaded image is not recognized as satellite data."
-}
-
-Now analyze the uploaded image using the 25 rules above.
-    `;
+    const prompt = `... your 25-rule prompt as before ...`;
 
     const result = await model.generateContent([prompt, image]);
     const response = await result.response;
@@ -122,8 +67,8 @@ Now analyze the uploaded image using the 25 rules above.
       throw new Error("Invalid JSON returned from Gemini.");
     }
 
-    // ✅ Save to CSV in Downloads folder
-    const csvPath = 'C:/Users/user/Downloads/analysisDB.csv';
+    // ✅ Write CSV safely to project folder
+    const csvPath = path.join(__dirname, 'analysisDB.csv');
     const csvLine = [
       req.file.originalname,
       parsed.event,
@@ -133,23 +78,23 @@ Now analyze the uploaded image using the 25 rules above.
       parsed.summary.replace(/[\r\n]+/g, ' ').slice(0, 200)
     ].join(',') + '\n';
 
-    if (!fs.existsSync(csvPath)) {
-      const header = 'filename,event,event_area_percent,severity_rating,verdict,summary\n';
-      fs.writeFileSync(csvPath, header);
-    }
-
-    fs.appendFile(csvPath, csvLine, (err) => {
-      if (err) {
-        console.error("❌ Failed to write to CSV:", err);
+    try {
+      if (!fs.existsSync(csvPath)) {
+        console.log("🔹 CSV not found — creating new with header.");
+        const header = 'filename,event,event_area_percent,severity_rating,verdict,summary\n';
+        fs.writeFileSync(csvPath, header + csvLine);
       } else {
-        console.log(`✅ Analysis saved to ${csvPath}`);
+        fs.appendFileSync(csvPath, csvLine);
       }
-    });
+      console.log(`✅ Analysis saved to ${csvPath}`);
+    } catch (csvErr) {
+      console.error("❌ CSV write error:", csvErr.message, csvErr);
+    }
 
     return res.json({ analysis: parsed });
 
   } catch (error) {
-    console.error("❌ Error in /analyze:", error);
+    console.error("❌ Error in /analyze:", error.message, error);
     return res.status(500).json({ error: 'Analysis failed: ' + error.message });
   } finally {
     if (filePath && fs.existsSync(filePath)) {
