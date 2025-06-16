@@ -98,9 +98,7 @@ You are a rule-based expert system specialized in analyzing satellite images for
 }
 
 Now analyze the uploaded image using the 25 rules above.
-`;
-
-
+    `;
 
     const result = await model.generateContent([prompt, image]);
     const response = await result.response;
@@ -123,6 +121,24 @@ Now analyze the uploaded image using the 25 rules above.
       console.error("❌ Failed to parse Gemini JSON:", cleanJson);
       throw new Error("Invalid JSON returned from Gemini.");
     }
+
+    // ✅ Append to CSV log
+    const csvLine = [
+      req.file.originalname,
+      parsed.event,
+      parsed.event_area_percent,
+      parsed.severity_rating,
+      parsed.verdict,
+      parsed.summary.replace(/[\r\n]+/g, ' ').slice(0, 200)
+    ].join(',') + '\n';
+
+    fs.appendFile('analysisDB.csv', csvLine, (err) => {
+      if (err) {
+        console.error("❌ Failed to write to CSV:", err);
+      } else {
+        console.log("✅ Analysis saved to analysisDB.csv");
+      }
+    });
 
     return res.json({ analysis: parsed });
 
