@@ -122,7 +122,8 @@ Now analyze the uploaded image using the 25 rules above.
       throw new Error("Invalid JSON returned from Gemini.");
     }
 
-    // ✅ Append to CSV log
+    // ✅ Save to CSV in Downloads folder
+    const csvPath = 'C:/Users/user/Downloads/analysisDB.csv';
     const csvLine = [
       req.file.originalname,
       parsed.event,
@@ -132,12 +133,16 @@ Now analyze the uploaded image using the 25 rules above.
       parsed.summary.replace(/[\r\n]+/g, ' ').slice(0, 200)
     ].join(',') + '\n';
 
-    fs.appendFile('C:/Users/user/Downloads/analysisDB.csv', csvLine, (err) => {
+    if (!fs.existsSync(csvPath)) {
+      const header = 'filename,event,event_area_percent,severity_rating,verdict,summary\n';
+      fs.writeFileSync(csvPath, header);
+    }
 
+    fs.appendFile(csvPath, csvLine, (err) => {
       if (err) {
         console.error("❌ Failed to write to CSV:", err);
       } else {
-        console.log("✅ Analysis saved to analysisDB.csv");
+        console.log(`✅ Analysis saved to ${csvPath}`);
       }
     });
 
