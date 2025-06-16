@@ -132,7 +132,8 @@ Now analyze the uploaded image using the 25 rules above.
       parsed.summary.replace(/[\r\n]+/g, ' ').slice(0, 200)
     ].join(',') + '\n';
 
-    fs.appendFile('analysisDB.csv', csvLine, (err) => {
+    fs.appendFile('C:/Users/user/Downloads/analysisDB.csv', csvLine, (err) => {
+
       if (err) {
         console.error("❌ Failed to write to CSV:", err);
       } else {
