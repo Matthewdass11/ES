@@ -123,7 +123,7 @@ Now analyze the uploaded image using the 25 rules above.
     }
 
     // ✅ Save to CSV in Downloads folder
-    const csvPath = 'C:/Users/user/Downloads/analysisDB.csv';
+    const csvPath = path.join(__dirname, 'analysisDB.csv');
     const csvLine = [
       req.file.originalname,
       parsed.event,
