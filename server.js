@@ -122,7 +122,6 @@ Now analyze the uploaded image using the 25 rules above.
       throw new Error("Invalid JSON returned from Gemini.");
     }
 
-    // ✅ Save to CSV in Downloads folder
     const csvPath = path.join(__dirname, 'analysisDB.csv');
     const csvLine = [
       req.file.originalname,
@@ -158,6 +157,17 @@ Now analyze the uploaded image using the 25 rules above.
       console.log("🗑️ Temp image deleted");
     }
   }
+});
+
+// ✅ Download route — no button needed
+app.get('/download-csv', (req, res) => {
+  const file = path.join(__dirname, 'analysisDB.csv');
+  res.download(file, 'analysisDB.csv', (err) => {
+    if (err) {
+      console.error("❌ CSV download failed:", err.message);
+      res.status(500).send("Download failed");
+    }
+  });
 });
 
 app.listen(port, () => {
